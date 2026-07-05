@@ -1,0 +1,13 @@
+model_list:
+  - model_name: ollama
+    litellm_params:
+      model: ollama_chat/qwen3-coder
+      api_base: http://127.0.0.1:11466
+      num_ctx: 32768
+      keep_alive: "30m"
+      timeout: 1800
+litellm_settings:
+  drop_params: true
+  request_timeout: 1800
+general_settings:
+  master_key: dummy-local-token

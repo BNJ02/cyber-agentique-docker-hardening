@@ -1,0 +1,2 @@
+egress_proxy  | [egress][DEFENSE] ALLOW POST api.trusted.local/v1/messages -> valid session, no secret, non-upload
+egress_proxy  | [egress][DEFENSE] BLOCK POST api.trusted.local/v1/upload -> invalid/attacker session token

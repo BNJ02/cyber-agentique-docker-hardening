@@ -1,0 +1,43 @@
+Hardened container runs the REAL agent — and config stays protected.
+
+The real Claude Code agent was launched INSIDE a container carrying the full
+FS/kernel hardening (read-only rootfs, :ro config, tmpfs runtime, cap-drop=ALL,
+no-new-privileges, non-root uid 1001, pids/mem/cpu limits), pointed at the local
+Ollama model. Sanity of that container:
+
+  id: uid=1001(agent) gid=1001(agent) groups=1001(agent)      # non-root
+  claude: 2.1.197 (Claude Code)                               # real agent present
+  CapEff: 0000000000000000    NoNewPrivs: 1                   # all caps dropped
+  touch /agent/config/x  -> Read-only file system             # config protected
+  touch /rootfs_x        -> Read-only file system             # rootfs protected
+  config md5 after run   -> all 4 files UNCHANGED
+
+Result: the hardening does NOT prevent the real agent from booting, loading its
+mounted config, calling the local model and producing output; and while it runs,
+its own configuration cannot be modified.
+
+--- Honest limits found while trying a LIVE agentic edit / live injection ---
+
+1) Local small models drive Claude Code to PRODUCE the correct action but do not
+   reliably EXECUTE it as a tool call through the Claude-Code + LiteLLM + Ollama
+   path on this CPU host:
+     - qwen2.5-coder:1.5b emitted a tool call as raw TEXT with a hallucinated
+       path (`{"name":"Write","file_path":"/agent/config/calc.py"}`).
+     - llama3.2:3b (which DOES emit structured tool_calls to Ollama directly)
+       still returned the mul() function as markdown text plus a `with open(...)`
+       snippet, without executing the Edit/Write tool.
+   => Genuine agentic tool EXECUTION needs a stronger model than fits this
+      RAM-limited, CPU-only host (a cold load previously OOM-crashed it). This is
+      a model-capability / integration limit, NOT a hardening flaw.
+
+2) Workspace RW-zone ownership: the bind-mounted /workspace is owned by the host
+   user (uid 1000) while the hardened agent runs as uid 1001, so writes to the
+   legitimate RW zone are refused ("Permission denied"). For real workspace edits
+   the RW zone must be owned by / writable to the agent uid (chown to 1001, or run
+   the agent with the host user's uid). The config-protection results are
+   unaffected (config is :ro regardless).
+
+Conclusion: because reliable live tool execution is not achievable with a
+host-fitting model, the deterministic post-injection harness (demo/run-attacks.sh)
+remains the rigorous proof of the config/state protection — and it is
+model-independent by design.

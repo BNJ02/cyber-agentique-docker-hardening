@@ -1,0 +1,9 @@
+{
+  "$comment": "Declared MCP servers = the tool/capability surface of the agent. Mounted read-only in the hardened deployment. Adding a server here grants NEW capabilities to the agent (widens blast radius). The attack scenario tries to inject a rogue server entry.",
+  "mcpServers": {
+    "filesystem": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-filesystem", "/workspace"]
+    }
+  }
+}

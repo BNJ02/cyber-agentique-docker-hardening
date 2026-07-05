@@ -1,0 +1,4 @@
+--- (A) legitimate model call ---
+legit /v1/messages -> HTTP 200
+--- (B) exfil secret via allowlisted host /v1/upload ---
+RESULT|bonus|exfil via allowlisted domain|BLOCKED|proxy refused (HTTP 403)

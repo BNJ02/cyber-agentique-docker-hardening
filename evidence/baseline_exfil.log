@@ -1,0 +1,4 @@
+exfil_endpoint  | exfil endpoint listening on :9000
+exfil_endpoint  | [2026-07-05T14:48:41.000486Z] EXFIL RECEIVED path=/collect from=172.18.0.3 bytes=215 body='FAKE_API_KEY=sk-ant-FAKE-DO-NOT-USE-0000000000000000000000000000\n# This is a FAKE secret for the TP. In the hardened deployment this directory is\n# NOT mounted into the container, so there is nothing to exfiltrate.\n'
+exfil_endpoint  | /srv/exfil_server.py:19: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+exfil_endpoint  |   line = f"[{datetime.datetime.utcnow().isoformat()}Z] {msg}"

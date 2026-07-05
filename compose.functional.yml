@@ -1,0 +1,48 @@
+# ==========================================================================
+#  FUNCTIONAL deployment (Bloc 1): the REAL Claude Code agent doing a coding
+#  task, driven by a LOCAL model (Ollama) through a LiteLLM Anthropic->Ollama
+#  proxy. No Anthropic credential ever enters the container.
+#
+#  A live `claude -p` run SUCCEEDS with this setup (see
+#  evidence/functional_claude_run.txt). Two adjustments are needed for a small
+#  local model: route LiteLLM via Ollama's OpenAI-compatible endpoint
+#  (llm/litellm-config.yaml), and disable extended thinking (MAX_THINKING_TOKENS=0).
+#
+#  NOTE on the host used for this TP: CPU-only, limited RAM. Cold model load +
+#  Claude Code's large system-prompt prefill is slow (a cold load once OOM'd the
+#  host), so pre-warm the model. Ollama runs on the HOST (model cached); the proxy
+#  reaches it via the host network. Security posture (compose.hardened/bonus) is
+#  independent of the model.
+#
+#  Run:
+#    docker compose -f compose.functional.yml up -d litellm
+#    docker compose -f compose.functional.yml run --rm agent \
+#        claude -p "Implement mul(a,b) in calc.py and add a test" --model ollama
+# ==========================================================================
+services:
+
+  litellm:
+    image: ghcr.io/berriai/litellm:main-latest
+    container_name: litellm
+    network_mode: host                 # reach host Ollama at 127.0.0.1:11434
+    volumes:
+      - ./llm/litellm-config.yaml:/app/config.yaml:ro
+    command: ["--config", "/app/config.yaml", "--port", "4000"]
+
+  agent:
+    image: agentic-hardening/agent:latest
+    network_mode: host                 # reach litellm at 127.0.0.1:4000
+    environment:
+      ANTHROPIC_BASE_URL: http://127.0.0.1:4000
+      ANTHROPIC_AUTH_TOKEN: dummy-local-token
+      ANTHROPIC_MODEL: ollama
+      ANTHROPIC_SMALL_FAST_MODEL: ollama
+      MAX_THINKING_TOKENS: "0"            # 1.5B model does not support extended thinking
+      DISABLE_INTERLEAVED_THINKING: "1"
+      CLAUDE_CONFIG_DIR: /agent/config
+    volumes:
+      - ./config:/agent/config:ro
+      - ./workspace:/workspace:rw
+    working_dir: /workspace
+    entrypoint: ["claude"]
+    command: ["-p", "Reply with exactly one word: OK", "--model", "ollama"]

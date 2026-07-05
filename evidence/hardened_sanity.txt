@@ -1,0 +1,8 @@
+## identity
+uid=1001(agent) gid=1001(agent) groups=1001(agent)
+## no-new-privileges + caps
+CapEff:	0000000000000000
+NoNewPrivs:	1
+## rootfs read-only test
+touch: cannot touch '/rootfs_write_test': Read-only file system
+rootfs write refused (expected)

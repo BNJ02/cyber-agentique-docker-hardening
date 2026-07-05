@@ -1,0 +1,37 @@
+Functional proof — LIVE `claude -p` run against the LOCAL model (SUCCESS).
+
+The real Claude Code agent, in the container, driven by the local Ollama model
+through the LiteLLM proxy, ran headless and returned a correct answer. No
+Anthropic credential was used.
+
+Working configuration (two fixes were required):
+  1. LiteLLM route via Ollama's OpenAI-compatible endpoint:
+        model: openai/qwen2.5-coder:1.5b
+        api_base: http://127.0.0.1:11434/v1
+     (the native ollama_chat route returned opaque 500s on Claude Code's large
+      request; the OpenAI route surfaced the real cause below and is robust).
+  2. Disable extended thinking, which the 1.5B model rejects
+     ("does not support thinking"):
+        -e MAX_THINKING_TOKENS=0  -e DISABLE_INTERLEAVED_THINKING=1
+
+Command and result:
+  $ docker run --rm --network host \
+      -e ANTHROPIC_BASE_URL=http://127.0.0.1:4000 \
+      -e ANTHROPIC_AUTH_TOKEN=dummy-local-token \
+      -e ANTHROPIC_MODEL=ollama -e ANTHROPIC_SMALL_FAST_MODEL=ollama \
+      -e MAX_THINKING_TOKENS=0 -e DISABLE_INTERLEAVED_THINKING=1 \
+      -e CLAUDE_CONFIG_DIR=/agent/config \
+      -v $PWD/config:/agent/config:ro -v $PWD/workspace:/workspace:rw \
+      --entrypoint claude agentic-hardening/agent:latest \
+      -p "Reply with exactly one word: OK" --model ollama --output-format text
+
+  OK
+  EXITCODE=0
+
+Notes:
+- Warm local inference is fast (~1.7s for a short generation); the large Claude
+  Code system-prompt prefill on this CPU-only host is the slow part but completes.
+- A cold model load once OOM-crashed this RAM-limited host; runs are done with the
+  model pre-warmed and a RAM guard.
+- The security properties in this dossier are model-independent: they hold at the
+  container / filesystem / egress layer regardless of the driving model.

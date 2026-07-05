@@ -1,0 +1,20 @@
+# LiteLLM proxy: exposes an Anthropic-compatible endpoint that Claude Code can
+# call (ANTHROPIC_BASE_URL), and translates to the LOCAL Ollama model.
+# No Anthropic credential is ever used — the agent talks only to this local proxy.
+model_list:
+  - model_name: ollama
+    litellm_params:
+      # Route via Ollama's OpenAI-compatible endpoint (robust; surfaces real
+      # errors). This is the config behind the successful `claude -p` run in
+      # evidence/functional_claude_run.txt.
+      model: openai/qwen2.5-coder:1.5b
+      api_base: http://127.0.0.1:11434/v1
+      api_key: ollama
+      timeout: 1800
+
+litellm_settings:
+  drop_params: true
+  request_timeout: 1800
+
+general_settings:
+  master_key: dummy-local-token

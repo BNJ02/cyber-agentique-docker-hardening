@@ -1,0 +1,59 @@
+# ==========================================================================
+#  HARDENED ("agent durci") — the deliverable's centrepiece.
+#  Same image as baseline; the difference is entirely in these run options.
+#
+#  Controls applied (each mapped to a threat in the report):
+#   - config surface mounted READ-ONLY        -> no self-rewrite of settings/
+#                                                 CLAUDE.md/skills/.mcp.json
+#   - read_only root filesystem + tmpfs        -> no destructive write / no
+#                                                 persistence outside workspace
+#   - fake secret NOT mounted                  -> nothing to exfiltrate
+#   - internal network (no internet, no exfil) -> egress refused (capability
+#                                                 grant, not a destination filter)
+#   - non-root user (from image) + cap_drop    -> no privileged operations
+#   - no-new-privileges + restricted seccomp   -> no privilege escalation
+#   - pids/memory/cpu limits                   -> blast-radius / DoS containment
+#   - docker.sock is NEVER mounted             -> no daemon takeover / escape
+# ==========================================================================
+services:
+
+  agent:
+    build: ./agent-image
+    image: agentic-hardening/agent:latest
+    container_name: agent_hardened
+    working_dir: /workspace
+
+    # --- Filesystem partitioning ------------------------------------------
+    read_only: true                       # rootfs read-only (--read-only)
+    volumes:
+      - ./config:/agent/config:ro         # CONFIG SURFACE = READ-ONLY
+      - ./workspace:/workspace:rw         # workspace = the only rw zone
+      # NB: ./secrets is intentionally NOT mounted here.
+    tmpfs:                                # ephemeral writable scratch
+      - /tmp:mode=1777
+      - /run:mode=1777
+      - /home/agent:mode=1777             # Claude Code runtime state (~/.claude)
+
+    # --- Kernel / privilege hardening -------------------------------------
+    user: "1001:1001"                     # non-root (redundant with image USER)
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+      - seccomp=./agent-image/seccomp-claude.json
+
+    # --- Resource limits (cgroups) ----------------------------------------
+    pids_limit: 256
+    mem_limit: 512m
+    cpus: 1.0
+
+    # --- Egress control ---------------------------------------------------
+    networks:
+      - closed                            # internal-only: no internet, no exfil
+
+    command: ["sleep", "infinity"]
+
+networks:
+  closed:
+    driver: bridge
+    internal: true                        # no route to the outside world

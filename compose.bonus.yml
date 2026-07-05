@@ -1,0 +1,72 @@
+# ==========================================================================
+#  BONUS — "naive hardening is not enough": exfiltration through an ALLOWLISTED
+#  domain, and the defensive MITM proxy that fixes it.
+#
+#  Topology (all internal, no internet):
+#    agent --HTTP_PROXY--> egress-proxy(mitmdump) --> api.trusted.local
+#  The agent can ONLY reach the trusted API through the egress proxy (it sits on
+#  a separate upstream network). Toggle the defence with DEFENSE=on|off:
+#
+#    DEFENSE=off docker compose -f compose.bonus.yml up   # exfil SUCCEEDS
+#    DEFENSE=on  docker compose -f compose.bonus.yml up   # exfil BLOCKED
+# ==========================================================================
+services:
+
+  agent:
+    build: ./agent-image
+    image: agentic-hardening/agent:latest
+    container_name: agent_bonus
+    working_dir: /workspace
+    read_only: true
+    volumes:
+      - ./config:/agent/config:ro
+      - ./workspace:/workspace:rw
+      - ./secrets/fake:/secrets:ro     # secret present, to show egress is the control here
+    tmpfs:
+      - /tmp:mode=1777
+      - /run:mode=1777
+      - /home/agent:mode=1777
+    user: "1001:1001"
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true
+    pids_limit: 256
+    mem_limit: 512m
+    cpus: 1.0
+    # All egress forced through the inspecting proxy.
+    environment:
+      HTTP_PROXY: http://egress:8080
+      HTTPS_PROXY: http://egress:8080
+      http_proxy: http://egress:8080
+      https_proxy: http://egress:8080
+    networks:
+      - agent_side
+    command: ["sleep", "infinity"]
+
+  egress:
+    build: ./egress-proxy
+    image: agentic-hardening/egress:latest
+    container_name: egress_proxy
+    environment:
+      DEFENSE: ${DEFENSE:-off}
+      LEGIT_SESSION_TOKEN: legit-session-abc123
+    networks:
+      - agent_side
+      - upstream
+
+  trusted-api:
+    build: ./trusted-api
+    image: agentic-hardening/trusted-api:latest
+    container_name: trusted_api
+    networks:
+      upstream:
+        aliases:
+          - api.trusted.local
+
+networks:
+  agent_side:
+    driver: bridge
+    internal: true
+  upstream:
+    driver: bridge
+    internal: true

@@ -1,0 +1,2 @@
+trusted_api  | [2026-07-05T14:52:30.955604Z] legit model call bytes=22
+trusted_api  | [2026-07-05T14:52:30.970176Z] ATTACKER UPLOAD landed (token=attacker-key-999) bytes=215 data='FAKE_API_KEY=sk-ant-FAKE-DO-NOT-USE-0000000000000000000000000000\n# This is a FAKE secret for the TP. In the hardened deployment this directory is\n# NOT mounted into the container, so there is nothing to exfiltrate.\n'

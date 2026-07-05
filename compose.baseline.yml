@@ -1,0 +1,42 @@
+# ==========================================================================
+#  BASELINE ("agent nu") — deliberately PERMISSIVE deployment.
+#  Config is writable, root filesystem is writable, all capabilities kept,
+#  default seccomp, the fake secret IS mounted, and the agent shares a network
+#  with the attacker's exfil endpoint. Every attack in the demo SUCCEEDS here.
+#  This is the "before" side of the before/after comparison.
+# ==========================================================================
+services:
+
+  agent:
+    build: ./agent-image
+    image: agentic-hardening/agent:latest
+    container_name: agent_baseline
+    working_dir: /workspace
+    # Permissive default seen in the wild: the agent runs as ROOT. Combined with
+    # a writable config mount, a compromised agent can rewrite anything.
+    user: "0:0"
+    # Config surface mounted READ-WRITE -> a compromised agent can rewrite it.
+    volumes:
+      - ./config:/agent/config:rw
+      - ./workspace:/workspace:rw
+      # Fake secret is mounted -> available for exfiltration.
+      - ./secrets/fake:/secrets:ro
+    networks:
+      - open        # shares a network with the exfil endpoint + has internet
+    # No security_opt, no cap_drop, no read_only, no resource limits: permissive.
+    command: ["sleep", "infinity"]
+
+  # Attacker-controlled endpoint that receives exfiltrated data. Local only.
+  exfil:
+    build: ./exfil-server
+    image: agentic-hardening/exfil:latest
+    container_name: exfil_endpoint
+    networks:
+      open:
+        aliases:
+          - exfil.local
+    command: ["python3", "/srv/exfil_server.py"]
+
+networks:
+  open:
+    driver: bridge

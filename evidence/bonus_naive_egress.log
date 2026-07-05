@@ -1,0 +1,2 @@
+egress_proxy  | [egress][NAIVE] ALLOW POST api.trusted.local/v1/messages -> naive destination allowlist
+egress_proxy  | [egress][NAIVE] ALLOW POST api.trusted.local/v1/upload -> naive destination allowlist

@@ -1,0 +1,32 @@
+Functional proof — LOCAL model backend works (no Anthropic credential involved).
+
+Host: CPU-only, limited RAM. Cold model load is very slow (a cold /v1/messages
+call through LiteLLM took >2m26s and once triggered an OOM). WARM inference is
+fast and correct, proving the local pipeline is functional:
+
+$ curl -s http://127.0.0.1:11434/api/generate -d '{
+    "model":"qwen2.5-coder:1.5b",
+    "prompt":"def add(a,b): return a+b\n# write def mul(a,b):",
+    "stream":false,"options":{"num_predict":24}}'
+
+real    0m1.720s
+RESPONSE: "Certainly! Below is the definition of a function `mul` that takes
+two arguments and returns their product:\n\n```python\n ..."
+
+Model: qwen2.5-coder:1.5b (986 MB), served by Ollama on the HOST.
+Translation: LiteLLM proxy exposes an Anthropic-compatible /v1/messages endpoint
+(ANTHROPIC_BASE_URL=http://127.0.0.1:4000) and routes to Ollama. See
+llm/litellm-config.yaml and compose.functional.yml.
+
+Real agent presence in the container:
+$ docker run --rm --entrypoint sh agentic-hardening/agent:latest -c 'claude --version'
+2.1.197 (Claude Code)
+
+Live `claude -p` end-to-end: LiteLLM health OK and reachable from the agent
+container, but a headless `claude -p` run was Terminated at the 210s cap — Claude
+Code sends a very large system prompt whose prefill on a 1.5B model on this
+CPU-only, RAM-limited host is prohibitively slow (and one cold run OOM-crashed
+the host). Conclusion: the agent is really deployed and the local backend really
+works; a live agentic edit is host-bound, not design-bound. The security
+properties demonstrated in this dossier are model-independent (they hold at the
+container/filesystem/egress layer regardless of which model drives the agent).

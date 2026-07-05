@@ -1,0 +1,28 @@
+# LaTeX build artifacts
+report/*.aux
+report/*.log
+report/*.out
+report/*.toc
+report/*.synctex.gz
+report/*.fls
+report/*.fdb_latexmk
+*.bak
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+
+# OS / editor
+.DS_Store
+Thumbs.db
+*.swp
+.vscode/
+.idea/
+
+# Local runtime / scratch
+*.tmp
+scratch/
+
+# Instructor's assignment brief — not ours to redistribute publicly
+Project.Agentic.Hardenning.pdf
