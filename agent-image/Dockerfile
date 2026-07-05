@@ -2,7 +2,10 @@
 # The SAME image is used for the baseline (nu) and hardened (durci) deployments;
 # the security difference is entirely in the `docker run` / compose options
 # (read-only rootfs, :ro mounts, cap-drop, seccomp, egress, limits).
-FROM node:20-bookworm-slim
+# Pinned by digest: a mutable tag repoint or upstream compromise cannot swap the
+# base out from under the build. Refresh with:
+#   docker buildx imagetools inspect node:20-bookworm-slim
+FROM node:20-bookworm-slim@sha256:2cf067cfed83d5ea958367df9f966191a942351a2df77d6f0193e162b5febfc0
 
 # Tools needed by the agent's legitimate task (python) and by the attack
 # scenarios (curl is used by the exfil attempt; it is neutralised in hardened
@@ -13,7 +16,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 # Real agent: Claude Code CLI (pinned by the image build date; record the
 # resolved version in the report via `claude --version`).
-RUN npm install -g @anthropic-ai/claude-code
+# Pinned version: reproducible build, no silent upstream pull.
+RUN npm install -g @anthropic-ai/claude-code@2.1.197
 
 # Non-root user (UID 1001; the base image already uses 1000 for `node`).
 # Runtime state dirs are created but will be backed by tmpfs when hardened.

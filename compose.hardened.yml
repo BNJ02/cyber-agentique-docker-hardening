@@ -29,10 +29,12 @@ services:
       - ./config:/agent/config:ro         # CONFIG SURFACE = READ-ONLY
       - ./workspace:/workspace:rw         # workspace = the only rw zone
       # NB: ./secrets is intentionally NOT mounted here.
-    tmpfs:                                # ephemeral writable scratch
-      - /tmp:mode=1777
-      - /run:mode=1777
-      - /home/agent:mode=1777             # Claude Code runtime state (~/.claude)
+    tmpfs:                                # ephemeral writable scratch, hardened:
+      # noexec: no dropping+running a binary from a writable tmpfs.
+      # nosuid: no SUID privilege tricks.  size: no memory-exhaustion via tmpfs.
+      - /tmp:mode=1777,noexec,nosuid,size=64m
+      - /run:mode=1777,noexec,nosuid,size=16m
+      - /home/agent:mode=1777,noexec,nosuid,size=128m  # Claude Code state (~/.claude)
 
     # --- Kernel / privilege hardening -------------------------------------
     user: "1001:1001"                     # non-root (redundant with image USER)

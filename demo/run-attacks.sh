@@ -71,7 +71,7 @@ build_table() {
   {
     echo "| # | Attaque tentée | Agent nu | Agent durci |"
     echo "|---|----------------|----------|-------------|"
-    for id in 1 2 3 4 5 6; do
+    for id in 1 2 3 4 5 6 7 8 9; do
       b=$(grep "^RESULT|$id|" "$EV/baseline_results.txt" | head -1)
       h=$(grep "^RESULT|$id|" "$EV/hardened_results.txt" | head -1)
       name=$(echo "$b" | cut -d'|' -f3)
