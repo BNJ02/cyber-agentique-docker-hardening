@@ -6,7 +6,7 @@ configuration et d'état est protégée en **lecture seule**, de sorte qu'un age
 **pas** réécrire `settings.json`, `CLAUDE.md`, ses skills ni `.mcp.json`, ni exfiltrer un secret,
 ni exécuter une commande destructrice hors de son espace de travail.
 
-Projet de sécurité individuel — Télécom Paris, Mastère spécialisé IA / DATA.
+Projet de sécurité individuel, Télécom Paris, Mastère spécialisé IA / DATA.
 Le rapport complet est dans [`report/rapport.pdf`](report/rapport.pdf).
 
 ---
@@ -25,37 +25,91 @@ Le rapport complet est dans [`report/rapport.pdf`](report/rapport.pdf).
 **6 attaques sur 6** réussies sur l'agent nu, **6 sur 6 bloquées** sur l'agent durci.
 Preuves brutes dans [`evidence/`](evidence/) (logs, `docker diff`, empreintes de fichiers).
 
-**Bonus** — exfiltration via un domaine *pourtant présent dans l'allowlist* (reproduction de
-l'incident Anthropic « Cowork »), puis neutralisation par un proxy MITM défensif inspectant
-identité et contenu.
+---
 
-**Agent réel exécuté** — piloté par un modèle local capable (`qwen3-coder`, GPU), Claude Code
-réalise une vraie boucle agentique **dans le conteneur durci** : il édite du code légitime, et son
-écriture sur un fichier de configuration est **bloquée en direct** par le montage lecture seule.
+## La boucle agentique et sa surface de configuration
+
+Un agent de codage est un LLM placé dans une boucle *perception → raisonnement → action →
+observation*, doté d'outils. À chaque session, il **lit, et exécute parfois**, des fichiers de
+configuration qui pilotent son comportement. Ces fichiers sont la surface d'attaque à protéger.
+
+```mermaid
+flowchart LR
+    subgraph LOOP["Boucle agentique"]
+        direction LR
+        P["Perception<br/>prompt, fichiers"] --> R["Raisonnement<br/>LLM"]
+        R --> A["Action<br/>appel d'outil"]
+        A --> O["Observation<br/>sortie d'outil"]
+        O --> P
+    end
+    T["Outils : Shell / FS / Réseau / MCP / Git"]
+    A <--> T
+    CFG["Surface config/état<br/>settings.json (hooks)<br/>CLAUDE.md · skills/ · .mcp.json"]:::danger
+    CFG -.->|"lue / exécutée à chaque session"| P
+    classDef danger fill:#FEE2E2,stroke:#B91C1C,color:#1F2933;
+```
 
 ---
 
-## Architecture
+## Architecture : avant / après
 
-```
-                 AVANT (agent nu)                    APRÈS (agent durci)
-        ┌──────────────────────────┐        ┌────────────────────────────────┐
-        │ Conteneur (root, caps++) │        │ Conteneur (uid 1001, cap-drop) │
-        │  Config  :rw             │        │  Config  :ro (settings/CLAUDE/ │
-        │  rootfs inscriptible     │        │            skills/.mcp.json)   │
-        │  /secrets monté          │        │  /workspace :rw   tmpfs (état) │
-        └───────────┬──────────────┘        │  rootfs --read-only            │
-                    │ fuite                  └───────────────┬────────────────┘
-             Réseau ouvert                       Réseau internal (pas d'Internet)
-                    │                                        │
-               exfil.local                        exfil bloquée (secret non monté)
-                                              + seccomp allowlist · no-new-privileges
-                                              + pids/mem/cpu limits
-```
-
-La même image Docker sert au nu et au durci ; toute la différence tient dans les options de `run` /
+La même image Docker sert au nu et au durci. Toute la différence tient dans les options de `run` /
 `compose`. Astuce clé : `CLAUDE_CONFIG_DIR=/agent/config` sépare la **surface de configuration**
 (montée `:ro`) de l'**état runtime** de Claude Code (`~/.claude`, sur `tmpfs` inscriptible).
+
+```mermaid
+flowchart LR
+    subgraph NU["AVANT : agent nu"]
+        direction TB
+        N0["Conteneur : root, toutes capacités"]
+        N1["Config :rw"]:::bad
+        N2["rootfs inscriptible"]:::bad
+        N3["/secrets monté"]:::bad
+        N0 --> N1 --> N2 --> N3
+        N3 --> NN["Réseau ouvert (Internet)"]
+        NN -->|"fuite"| NX["exfil.local"]:::bad
+    end
+    subgraph DURCI["APRÈS : agent durci"]
+        direction TB
+        H0["Conteneur : uid 1001, cap-drop=ALL,<br/>no-new-privileges, seccomp allowlist"]
+        H1["Config :ro<br/>settings.json · CLAUDE.md · skills/ · .mcp.json"]:::ro
+        H2["/workspace :rw"]:::rw
+        H3["tmpfs : état runtime"]:::rw
+        H4["rootfs --read-only"]:::ro
+        H0 --> H1
+        H1 --> H2
+        H1 --> H3
+        H1 --> H4
+        H4 --> HN["Réseau internal (pas d'Internet)"]
+        HN -.->|"refusé"| HX["exfil bloquée<br/>secret non monté"]:::good
+    end
+    classDef bad fill:#FEE2E2,stroke:#B91C1C,color:#1F2933;
+    classDef good fill:#DCFCE7,stroke:#15803D,color:#1F2933;
+    classDef rw fill:#FEF3C7,stroke:#B45309,color:#1F2933;
+    classDef ro fill:#DBEAFE,stroke:#2563EB,color:#1F2933;
+```
+
+---
+
+## Bonus : exfiltration via un domaine allowlisté
+
+Le durcissement naïf conçoit l'allowlist d'egress comme un *filtre de destination*. Or une allowlist
+est un **octroi de capacité** : toute fonction atteignable derrière un domaine autorisé devient
+surface d'attaque. On reproduit l'incident Anthropic « Cowork », puis on le neutralise avec un proxy
+MITM défensif inspectant identité et contenu.
+
+```mermaid
+flowchart LR
+    AG["Agent compromis<br/>(prompt injecté)"] -->|"POST /v1/upload + secret"| PX{"Proxy egress<br/>allowlist api.trusted.local"}
+    PX -->|"DEFENSE=off<br/>filtre de destination"| BAD["Upload autorisé<br/>secret exfiltré ✗"]:::bad
+    PX -->|"DEFENSE=on<br/>inspection identité + contenu"| OK["Upload bloqué (403)<br/>appel légitime préservé ✓"]:::good
+    classDef bad fill:#FEE2E2,stroke:#B91C1C,color:#1F2933;
+    classDef good fill:#DCFCE7,stroke:#15803D,color:#1F2933;
+```
+
+**Agent réel exécuté** : piloté par un modèle local capable (`qwen3-coder`, GPU), Claude Code réalise
+une vraie boucle agentique **dans le conteneur durci**. Il édite du code légitime, et son écriture sur
+un fichier de configuration est **bloquée en direct** par le montage lecture seule.
 
 ---
 
@@ -109,7 +163,7 @@ en allowlist, contrôle d'egress (réseau `internal`), limites cgroups, et secre
 
 ## Références
 
-- Anthropic — *How we contain Claude across products* et *Claude Code sandboxing*
+- Anthropic, *How we contain Claude across products* et *Claude Code sandboxing*
 - [`anthropic-experimental/sandbox-runtime`](https://github.com/anthropic-experimental/sandbox-runtime)
 - OWASP Top 10 for LLM Applications (LLM01 Prompt Injection, LLM06 Excessive Agency)
 - [Docker security](https://docs.docker.com/engine/security/) · [seccomp](https://docs.docker.com/engine/security/seccomp/) · [Model Context Protocol](https://modelcontextprotocol.io/)
@@ -124,4 +178,4 @@ contre un système tiers. Le contenu est fourni à des fins **éducatives et dé
 
 ## Licence
 
-MIT — voir [`LICENSE`](LICENSE).
+MIT, voir [`LICENSE`](LICENSE).
